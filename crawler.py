@@ -65,12 +65,21 @@ def get_content(url):
     # store content into dict
     data['title'] = title
     data['content'] = content
-    print(str(data))
+    return data
+
+
+def write_content(filename, url):
+    ''' write json data to file '''
+    with open('content/%s' % filename, 'w') as file:
+        data = get_content(url)
+        file.write(json.dumps(data))
+        file.close()
 
 
 def main():
     # get_urls()
-    get_content(parent_urls[0])
+    # get_content(parent_urls[0])
+    write_content('test.txt', parent_urls[0])
 
 
 if __name__ == '__main__':
