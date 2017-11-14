@@ -1,23 +1,18 @@
 import nltk
 from bs4 import BeautifulSoup
 import os
-import shutil
-import sys
-from math import log
-
-# Sets encoding to utf8
-reload(sys)
-sys.setdefaultencoding('utf8')
+from afinn import Afinn
 
 
 # Writes a frequency inverted index to a text file using the spimi algorithm
 def create_inverted_index():
     inverted_index = dict()
+    afinn = Afinn()
 
     # Goes through each of the documents
     for i in range(22):
         file_name = "reuters21578/reut2-{:03d}.sgm".format(i)
-        soup = BeautifulSoup(open(file_name), "html.parser")
+        soup = BeautifulSoup(open(file_name, encoding="latin-1"), "html.parser")
 
         articles = soup.find_all("reuters")  # Retrieves a list of articles within a file
 
@@ -38,18 +33,15 @@ def create_inverted_index():
                     inverted_index[modified_token][newid] += 1
 
     # Write to text file
-    f = open("inverted_index", "w")
+    f = open("inverted_index.txt", "w")
     sorted_terms = sorted(inverted_index)
 
     for term in sorted_terms:
-        f.write(term)
-        for posting, frequency in inverted_index[term].iteritems():
-            f.write(" %s %s" % (posting, frequency))
-            f.write("\n")
-            f.close()
-
-            inverted_index = dict()
-
+        sentiment = afinn.score(term)
+        f.write("%s %s " % (term, sentiment))
+        for posting, frequency in inverted_index[term].items():
+            f.write("%s %s" % (posting, frequency))
+        f.write("\n")
 
     f.close()   # Closes file
 
@@ -68,9 +60,7 @@ def load_inverted_index():
         for i in range(1, len(elements), 2):
             index[elements[0]][elements[i]] = elements[i + 1]
 
-    return index
+    return inverted_index
 
 
-
-
-query_tests()
+create_inverted_index()
