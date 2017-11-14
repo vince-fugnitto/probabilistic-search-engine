@@ -1,13 +1,12 @@
 """Tests of the builder registry."""
 
 import unittest
+import warnings
 
 from bs4 import BeautifulSoup
 from bs4.builder import (
     builder_registry as registry,
     HTMLParserTreeBuilder,
-    LXMLTreeBuilderForXML,
-    LXMLTreeBuilder,
     TreeBuilderRegistry,
 )
 
@@ -17,33 +16,50 @@ try:
 except ImportError:
     HTML5LIB_PRESENT = False
 
+try:
+    from bs4.builder import (
+        LXMLTreeBuilderForXML,
+        LXMLTreeBuilder,
+        )
+    LXML_PRESENT = True
+except ImportError:
+    LXML_PRESENT = False
+
 
 class BuiltInRegistryTest(unittest.TestCase):
     """Test the built-in registry with the default builders registered."""
 
     def test_combination(self):
-        self.assertEqual(registry.lookup('fast', 'html'),
-                          LXMLTreeBuilder)
-        self.assertEqual(registry.lookup('permissive', 'xml'),
-                          LXMLTreeBuilderForXML)
+        if LXML_PRESENT:
+            self.assertEqual(registry.lookup('fast', 'html'),
+                             LXMLTreeBuilder)
+
+        if LXML_PRESENT:
+            self.assertEqual(registry.lookup('permissive', 'xml'),
+                             LXMLTreeBuilderForXML)
         self.assertEqual(registry.lookup('strict', 'html'),
                           HTMLParserTreeBuilder)
         if HTML5LIB_PRESENT:
-            self.assertEqual(registry.lookup('permissive', 'html'),
+            self.assertEqual(registry.lookup('html5lib', 'html'),
                               HTML5TreeBuilder)
 
     def test_lookup_by_markup_type(self):
-        if HTML5LIB_PRESENT:
-            self.assertEqual(registry.lookup('html'), HTML5TreeBuilder)
-        else:
+        if LXML_PRESENT:
             self.assertEqual(registry.lookup('html'), LXMLTreeBuilder)
-        self.assertEqual(registry.lookup('xml'), LXMLTreeBuilderForXML)
+            self.assertEqual(registry.lookup('xml'), LXMLTreeBuilderForXML)
+        else:
+            self.assertEqual(registry.lookup('xml'), None)
+            if HTML5LIB_PRESENT:
+                self.assertEqual(registry.lookup('html'), HTML5TreeBuilder)
+            else:
+                self.assertEqual(registry.lookup('html'), HTMLParserTreeBuilder)
 
     def test_named_library(self):
-        self.assertEqual(registry.lookup('lxml', 'xml'),
-                          LXMLTreeBuilderForXML)
-        self.assertEqual(registry.lookup('lxml', 'html'),
-                          LXMLTreeBuilder)
+        if LXML_PRESENT:
+            self.assertEqual(registry.lookup('lxml', 'xml'),
+                             LXMLTreeBuilderForXML)
+            self.assertEqual(registry.lookup('lxml', 'html'),
+                             LXMLTreeBuilder)
         if HTML5LIB_PRESENT:
             self.assertEqual(registry.lookup('html5lib'),
                               HTML5TreeBuilder)
@@ -52,10 +68,15 @@ class BuiltInRegistryTest(unittest.TestCase):
                           HTMLParserTreeBuilder)
 
     def test_beautifulsoup_constructor_does_lookup(self):
-        # You can pass in a string.
-        BeautifulSoup("", features="html")
-        # Or a list of strings.
-        BeautifulSoup("", features=["html", "fast"])
+
+        with warnings.catch_warnings(record=True) as w:
+            # This will create a warning about not explicitly
+            # specifying a parser, but we'll ignore it.
+
+            # You can pass in a string.
+            BeautifulSoup("", features="html")
+            # Or a list of strings.
+            BeautifulSoup("", features=["html", "fast"])
 
         # You'll get an exception if BS can't find an appropriate
         # builder.

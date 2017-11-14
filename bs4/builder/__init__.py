@@ -1,6 +1,15 @@
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 from collections import defaultdict
-import re
+import itertools
 import sys
+from bs4.element import (
+    CharsetMetaAttributeValue,
+    ContentMetaAttributeValue,
+    HTMLAwareEntitySubstitution,
+    whitespace_re
+    )
 
 __all__ = [
     'HTMLTreeBuilder',
@@ -72,16 +81,23 @@ class TreeBuilderRegistry(object):
 # to look up builders in this registry.
 builder_registry = TreeBuilderRegistry()
 
-
 class TreeBuilder(object):
     """Turn a document into a Beautiful Soup object tree."""
 
+    NAME = "[Unknown tree builder]"
+    ALTERNATE_NAMES = []
     features = []
 
     is_xml = False
+    picklable = False
     preserve_whitespace_tags = set()
     empty_element_tags = None # A tag will be considered an empty-element
                               # tag when and only when it has no contents.
+
+    # A value for these tag/attribute combinations is a space- or
+    # comma-separated list of CDATA, rather than a single CDATA.
+    cdata_list_attributes = {}
+
 
     def __init__(self):
         self.soup = None
@@ -115,7 +131,7 @@ class TreeBuilder(object):
 
     def prepare_markup(self, markup, user_specified_encoding=None,
                        document_declared_encoding=None):
-        return markup, None, None
+        return markup, None, None, False
 
     def test_fragment_to_document(self, fragment):
         """Wrap an HTML fragment to make it look like a document.
@@ -131,8 +147,37 @@ class TreeBuilder(object):
         return fragment
 
     def set_up_substitutions(self, tag):
-        pass
+        return False
 
+    def _replace_cdata_list_attribute_values(self, tag_name, attrs):
+        """Replaces class="foo bar" with class=["foo", "bar"]
+
+        Modifies its input in place.
+        """
+        if not attrs:
+            return attrs
+        if self.cdata_list_attributes:
+            universal = self.cdata_list_attributes.get('*', [])
+            tag_specific = self.cdata_list_attributes.get(
+                tag_name.lower(), None)
+            for attr in list(attrs.keys()):
+                if attr in universal or (tag_specific and attr in tag_specific):
+                    # We have a "class"-type attribute whose string
+                    # value is a whitespace-separated list of
+                    # values. Split it into a list.
+                    value = attrs[attr]
+                    if isinstance(value, str):
+                        values = whitespace_re.split(value)
+                    else:
+                        # html5lib sometimes calls setAttributes twice
+                        # for the same tag when rearranging the parse
+                        # tree. On the second call the attribute value
+                        # here is already a list.  If this happens,
+                        # leave the value alone rather than trying to
+                        # split it again.
+                        values = value
+                    attrs[attr] = values
+        return attrs
 
 class SAXTreeBuilder(TreeBuilder):
     """A Beautiful Soup treebuilder that listens for SAX events."""
@@ -186,49 +231,71 @@ class HTMLTreeBuilder(TreeBuilder):
     Such as which tags are empty-element tags.
     """
 
-    preserve_whitespace_tags = set(['pre', 'textarea'])
-    empty_element_tags = set(['br' , 'hr', 'input', 'img', 'meta',
-                              'spacer', 'link', 'frame', 'base'])
+    preserve_whitespace_tags = HTMLAwareEntitySubstitution.preserve_whitespace_tags
+    empty_element_tags = set([
+        # These are from HTML5.
+        'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'keygen', 'link', 'menuitem', 'meta', 'param', 'source', 'track', 'wbr',
 
-    # Used by set_up_substitutions to detect the charset in a META tag
-    CHARSET_RE = re.compile("((^|;)\s*charset=)([^;]*)", re.M)
+        # These are from HTML4, removed in HTML5.
+        'spacer', 'frame'
+    ])
+
+    # The HTML standard defines these attributes as containing a
+    # space-separated list of values, not a single value. That is,
+    # class="foo bar" means that the 'class' attribute has two values,
+    # 'foo' and 'bar', not the single value 'foo bar'.  When we
+    # encounter one of these attributes, we will parse its value into
+    # a list of values if possible. Upon output, the list will be
+    # converted back into a string.
+    cdata_list_attributes = {
+        "*" : ['class', 'accesskey', 'dropzone'],
+        "a" : ['rel', 'rev'],
+        "link" :  ['rel', 'rev'],
+        "td" : ["headers"],
+        "th" : ["headers"],
+        "td" : ["headers"],
+        "form" : ["accept-charset"],
+        "object" : ["archive"],
+
+        # These are HTML5 specific, as are *.accesskey and *.dropzone above.
+        "area" : ["rel"],
+        "icon" : ["sizes"],
+        "iframe" : ["sandbox"],
+        "output" : ["for"],
+        }
 
     def set_up_substitutions(self, tag):
+        # We are only interested in <meta> tags
         if tag.name != 'meta':
             return False
 
         http_equiv = tag.get('http-equiv')
         content = tag.get('content')
+        charset = tag.get('charset')
 
-        if (http_equiv is not None
-            and content is not None
-            and http_equiv.lower() == 'content-type'):
-            # This is an interesting meta tag.
-            match = self.CHARSET_RE.search(content)
-            if match:
-                if (self.soup.declared_html_encoding is not None or
-                    self.soup.original_encoding == self.soup.from_encoding):
-                    # An HTML encoding was sniffed while converting
-                    # the document to Unicode, or an HTML encoding was
-                    # sniffed during a previous pass through the
-                    # document, or an encoding was specified
-                    # explicitly and it worked. Rewrite the meta tag.
-                    def rewrite(match):
-                        return match.group(1) + "%SOUP-ENCODING%"
-                    tag['content'] = self.CHARSET_RE.sub(rewrite, content)
-                    return True
-                else:
-                    # This is our first pass through the document.
-                    # Go through it again with the encoding information.
-                    new_charset = match.group(3)
-                    if (new_charset is not None
-                        and new_charset != self.soup.original_encoding):
-                        self.soup.declared_html_encoding = new_charset
-                        self.soup._feed(self.soup.declared_html_encoding)
-                        raise StopParsing
-                    pass
-        return False
+        # We are interested in <meta> tags that say what encoding the
+        # document was originally in. This means HTML 5-style <meta>
+        # tags that provide the "charset" attribute. It also means
+        # HTML 4-style <meta> tags that provide the "content"
+        # attribute and have "http-equiv" set to "content-type".
+        #
+        # In both cases we will replace the value of the appropriate
+        # attribute with a standin object that can take on any
+        # encoding.
+        meta_encoding = None
+        if charset is not None:
+            # HTML 5 style:
+            # <meta charset="utf8">
+            meta_encoding = charset
+            tag['charset'] = CharsetMetaAttributeValue(charset)
 
+        elif (content is not None and http_equiv is not None
+              and http_equiv.lower() == 'content-type'):
+            # HTML 4 style:
+            # <meta http-equiv="content-type" content="text/html; charset=utf8">
+            tag['content'] = ContentMetaAttributeValue(content)
+
+        return (meta_encoding is not None)
 
 def register_treebuilders_from(module):
     """Copy TreeBuilders from the given module into this module."""
@@ -243,21 +310,24 @@ def register_treebuilders_from(module):
             # Register the builder while we're at it.
             this_module.builder_registry.register(obj)
 
-# Builders are registered in reverse order of priority, so that custom
-# builder registrations will take precedence. In general, we want
-# html5lib to take precedence over lxml, because it's more
-# reliable. And we only want to use HTMLParser as a last result.
-from .import _htmlparser
-register_treebuilders_from(_htmlparser)
-try:
-    from . import _lxml
-    register_treebuilders_from(_lxml)
-except ImportError:
-    # They don't have lxml installed.
+class ParserRejectedMarkup(Exception):
     pass
+
+# Builders are registered in reverse order of priority, so that custom
+# builder registrations will take precedence. In general, we want lxml
+# to take precedence over html5lib, because it's faster. And we only
+# want to use HTMLParser as a last result.
+from . import _htmlparser
+register_treebuilders_from(_htmlparser)
 try:
     from . import _html5lib
     register_treebuilders_from(_html5lib)
 except ImportError:
     # They don't have html5lib installed.
+    pass
+try:
+    from . import _lxml
+    register_treebuilders_from(_lxml)
+except ImportError:
+    # They don't have lxml installed.
     pass

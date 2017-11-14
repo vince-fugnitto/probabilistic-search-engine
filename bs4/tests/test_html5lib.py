@@ -1,21 +1,24 @@
+"""Tests to ensure that the html5lib tree builder generates good trees."""
+
+import warnings
+
 try:
     from bs4.builder import HTML5TreeBuilder
     HTML5LIB_PRESENT = True
-except ImportError, e:
+except ImportError as e:
     HTML5LIB_PRESENT = False
-from bs4.element import Comment, SoupStrainer
-from test_lxml import (
-    TestLXMLBuilder,
-    TestLXMLBuilderInvalidMarkup,
-    TestLXMLBuilderEncodingConversion,
-    )
-import unittest
+from bs4.element import SoupStrainer
+from bs4.testing import (
+    HTML5TreeBuilderSmokeTest,
+    SoupTest,
+    skipIf,
+)
 
-@unittest.skipIf(
+@skipIf(
     not HTML5LIB_PRESENT,
     "html5lib seems not to be present, not testing its tree builder.")
-class TestHTML5Builder(TestLXMLBuilder):
-    """See `BuilderSmokeTest`."""
+class HTML5LibBuilderSmokeTest(SoupTest, HTML5TreeBuilderSmokeTest):
+    """See ``HTML5TreeBuilderSmokeTest``."""
 
     @property
     def default_builder(self):
@@ -25,20 +28,17 @@ class TestHTML5Builder(TestLXMLBuilder):
         # The html5lib tree builder does not support SoupStrainers.
         strainer = SoupStrainer("b")
         markup = "<p>A <b>bold</b> statement.</p>"
-        soup = self.soup(markup,
-                         parse_only=strainer)
+        with warnings.catch_warnings(record=True) as w:
+            soup = self.soup(markup, parse_only=strainer)
         self.assertEqual(
             soup.decode(), self.document_for(markup))
 
-    def test_bare_string(self):
-        # A bare string is turned into some kind of HTML document or
-        # fragment recognizable as the original string.
-        #
-        # In this case, lxml puts a <p> tag around the bare string.
-        self.assertSoupEquals(
-            "A bare string", "A bare string")
+        self.assertTrue(
+            "the html5lib tree builder doesn't support parse_only" in
+            str(w[0].message))
 
     def test_correctly_nested_tables(self):
+        """html5lib inserts <tbody> tags where other parsers don't."""
         markup = ('<table id="1">'
                   '<tr>'
                   "<td>Here's another table:"
@@ -57,183 +57,74 @@ class TestHTML5Builder(TestLXMLBuilder):
             "<tbody><tr><td>Bar</td></tr></tbody>"
             "<tfoot><tr><td>Baz</td></tr></tfoot></table>")
 
-    def test_literal_in_textarea(self):
-        markup = '<textarea>Junk like <b> tags and <&<&amp;</textarea>'
+    def test_xml_declaration_followed_by_doctype(self):
+        markup = '''<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html>
+  <head>
+  </head>
+  <body>
+   <p>foo</p>
+  </body>
+</html>'''
         soup = self.soup(markup)
-        self.assertEqual(
-            soup.textarea.contents, ["Junk like <b> tags and <&<&"])
+        # Verify that we can reach the <p> tag; this means the tree is connected.
+        self.assertEqual(b"<p>foo</p>", soup.p.encode())
 
-    def test_collapsed_whitespace(self):
-        """Whitespace is preserved even in tags that don't require it."""
-        self.assertSoupEquals("<p>   </p>")
-        self.assertSoupEquals("<b>   </b>")
-
-    def test_cdata_where_its_ok(self):
-        # In html5lib 0.9.0, all CDATA sections are converted into
-        # comments.  In a later version (unreleased as of this
-        # writing), CDATA sections in tags like <svg> and <math> will
-        # be preserved. BUT, I'm not sure how Beautiful Soup needs to
-        # adjust to transform this preservation into the construction
-        # of a BS CData object.
-        markup = "<svg><![CDATA[foobar]]>"
-
-        # Eventually we should be able to do a find(text="foobar") and
-        # get a CData object.
-        self.assertSoupEquals(markup, "<svg><!--[CDATA[foobar]]--></svg>")
-
-@unittest.skipIf(
-    not HTML5LIB_PRESENT,
-    "html5lib seems not to be present, not testing it on invalid markup.")
-class TestHTML5BuilderInvalidMarkup(TestLXMLBuilderInvalidMarkup):
-    """See `BuilderInvalidMarkupSmokeTest`."""
-
-    @property
-    def default_builder(self):
-        return HTML5TreeBuilder()
-
-    def test_unclosed_block_level_elements(self):
-        # The unclosed <b> tag is closed so that the block-level tag
-        # can be closed, and another <b> tag is inserted after the
-        # next block-level tag begins.
-        self.assertSoupEquals(
-            '<blockquote><p><b>Foo</blockquote><p>Bar',
-            '<blockquote><p><b>Foo</b></p></blockquote><p><b>Bar</b></p>')
-
-    def test_table_containing_bare_markup(self):
-        # Markup should be in table cells, not directly in the table.
-        self.assertSoupEquals("<table><div>Foo</div></table>",
-                              "<div>Foo</div><table></table>")
-
-    def test_incorrectly_nested_tables(self):
-        self.assertSoupEquals(
-            '<table><tr><table><tr id="nested">',
-            ('<table><tbody><tr></tr></tbody></table>'
-             '<table><tbody><tr id="nested"></tr></tbody></table>'))
-
-    def test_empty_element_tag_with_contents(self):
-        self.assertSoupEquals("<br>foo</br>", "<br />foo<br />")
-
-    def test_doctype_in_body(self):
-        markup = "<p>one<!DOCTYPE foobar>two</p>"
-        self.assertSoupEquals(markup, "<p>onetwo</p>")
-
-    def test_cdata_where_it_doesnt_belong(self):
-        # Random CDATA sections are converted into comments.
-        markup = "<div><![CDATA[foo]]>"
+    def test_reparented_markup(self):
+        markup = '<p><em>foo</p>\n<p>bar<a></a></em></p>'
         soup = self.soup(markup)
-        data = soup.find(text="[CDATA[foo]]")
-        self.assertEqual(data.__class__, Comment)
+        self.assertEqual("<body><p><em>foo</em></p><em>\n</em><p><em>bar<a></a></em></p></body>", soup.body.decode())
+        self.assertEqual(2, len(soup.find_all('p')))
 
-    def test_nonsensical_declaration(self):
-        # Declarations that don't make any sense are turned into comments.
-        soup = self.soup('<! Foo = -8><p>a</p>')
-        self.assertEqual(str(soup),
-                          ("<!-- Foo = -8-->"
-                           "<html><head></head><body><p>a</p></body></html>"))
 
-        soup = self.soup('<p>a</p><! Foo = -8>')
-        self.assertEqual(str(soup),
-                          ("<html><head></head><body><p>a</p>"
-                           "<!-- Foo = -8--></body></html>"))
-
-    def test_whitespace_in_doctype(self):
-        # A declaration that has extra whitespace is turned into a comment.
-        soup = self.soup((
-                '<! DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN">'
-                '<p>foo</p>'))
-        self.assertEqual(
-            str(soup),
-            ('<!-- DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"-->'
-             '<html><head></head><body><p>foo</p></body></html>'))
-
-    def test_incomplete_declaration(self):
-        # An incomplete declaration is treated as a comment.
-        markup = 'a<!b <p>c'
-        self.assertSoupEquals(markup, "a<!--b <p-->c")
-
-        # Let's spell that out a little more explicitly.
+    def test_reparented_markup_ends_with_whitespace(self):
+        markup = '<p><em>foo</p>\n<p>bar<a></a></em></p>\n'
         soup = self.soup(markup)
-        str1, comment, str2 = soup.body.contents
-        self.assertEqual(str1, 'a')
-        self.assertEqual(comment.__class__, Comment)
-        self.assertEqual(comment, 'b <p')
-        self.assertEqual(str2, 'c')
+        self.assertEqual("<body><p><em>foo</em></p><em>\n</em><p><em>bar<a></a></em></p>\n</body>", soup.body.decode())
+        self.assertEqual(2, len(soup.find_all('p')))
 
-    def test_document_starts_with_bogus_declaration(self):
-        soup = self.soup('<! Foo >a')
-        # 'Foo' becomes a comment that appears before the HTML.
-        comment = soup.contents[0]
-        self.assertTrue(isinstance(comment, Comment))
-        self.assertEqual(comment, 'Foo')
-
-        self.assertEqual(self.find(text="a") == "a")
-
-    def test_attribute_value_was_closed_by_subsequent_tag(self):
-        markup = """<a href="foo</a>, </a><a href="bar">baz</a>"""
+    def test_reparented_markup_containing_identical_whitespace_nodes(self):
+        """Verify that we keep the two whitespace nodes in this
+        document distinct when reparenting the adjacent <tbody> tags.
+        """
+        markup = '<table> <tbody><tbody><ims></tbody> </table>'
         soup = self.soup(markup)
-        # The string between the first and second quotes was interpreted
-        # as the value of the 'href' attribute.
-        self.assertEqual(soup.a['href'], 'foo</a>, </a><a href=')
+        space1, space2 = soup.find_all(string=' ')
+        tbody1, tbody2 = soup.find_all('tbody')
+        assert space1.next_element is tbody1
+        assert tbody2.next_element is space2
 
-        #The string after the second quote (bar"), was treated as an
-        #empty attribute called bar".
-        self.assertEqual(soup.a['bar"'], '')
-        self.assertEqual(soup.a.string, "baz")
+    def test_reparented_markup_containing_children(self):
+        markup = '<div><a>aftermath<p><noscript>target</noscript>aftermath</a></p></div>'
+        soup = self.soup(markup)
+        noscript = soup.noscript
+        self.assertEqual("target", noscript.next_element)
+        target = soup.find(string='target')
 
-    def test_document_starts_with_bogus_declaration(self):
-        soup = self.soup('<! Foo ><p>a</p>')
-        # The declaration becomes a comment.
-        comment = soup.contents[0]
-        self.assertTrue(isinstance(comment, Comment))
-        self.assertEqual(comment, ' Foo ')
-        self.assertEqual(soup.p.string, 'a')
+        # The 'aftermath' string was duplicated; we want the second one.
+        final_aftermath = soup.find_all(string='aftermath')[-1]
 
-    def test_document_ends_with_incomplete_declaration(self):
-        soup = self.soup('<p>a<!b')
-        # This becomes a string 'a'. The incomplete declaration is ignored.
-        # Compare html5lib, which turns it into a comment.
-        s, comment = soup.p.contents
-        self.assertEqual(s, 'a')
-        self.assertTrue(isinstance(comment, Comment))
-        self.assertEqual(comment, 'b')
+        # The <noscript> tag was moved beneath a copy of the <a> tag,
+        # but the 'target' string within is still connected to the
+        # (second) 'aftermath' string.
+        self.assertEqual(final_aftermath, target.next_element)
+        self.assertEqual(target, final_aftermath.previous_element)
+        
+    def test_processing_instruction(self):
+        """Processing instructions become comments."""
+        markup = b"""<?PITarget PIContent?>"""
+        soup = self.soup(markup)
+        assert str(soup).startswith("<!--?PITarget PIContent?-->")
 
-    def test_entity_was_not_finished(self):
-        soup = self.soup("<p>&lt;Hello&gt")
-        # Compare html5lib, which completes the entity.
-        self.assertEqual(soup.p.string, "<Hello>")
+    def test_cloned_multivalue_node(self):
+        markup = b"""<a class="my_class"><p></a>"""
+        soup = self.soup(markup)
+        a1, a2 = soup.find_all('a')
+        self.assertEqual(a1, a2)
+        assert a1 is not a2
 
-    def test_nonexistent_entity(self):
-        soup = self.soup("<p>foo&#bar;baz</p>")
-        self.assertEqual(soup.p.string, "foo&#bar;baz")
-
-        # Compare a real entity.
-        soup = self.soup("<p>foo&#100;baz</p>")
-        self.assertEqual(soup.p.string, "foodbaz")
-
-    def test_entity_out_of_range(self):
-        # An entity that's out of range will be converted to
-        # REPLACEMENT CHARACTER.
-        soup = self.soup("<p>&#10000000000000;</p>")
-        self.assertEqual(soup.p.string, u"\N{REPLACEMENT CHARACTER}")
-
-        soup = self.soup("<p>&#x1000000000000;</p>")
-        self.assertEqual(soup.p.string, u"\N{REPLACEMENT CHARACTER}")
-
-
-@unittest.skipIf(
-    not HTML5LIB_PRESENT,
-    "html5lib seems not to be present, not testing encoding conversion.")
-class TestHTML5LibEncodingConversion(TestLXMLBuilderEncodingConversion):
-    @property
-    def default_builder(self):
-        return HTML5TreeBuilder()
-
-    def test_real_hebrew_document(self):
-        # A real-world test to make sure we can convert ISO-8859-8 (a
-        # Hebrew encoding) to UTF-8.
-        soup = self.soup(self.HEBREW_DOCUMENT,
-                         from_encoding="iso-8859-8")
-        self.assertEqual(soup.original_encoding, 'iso8859-8')
-        self.assertEqual(
-            soup.encode('utf-8'),
-            self.HEBREW_DOCUMENT.decode("iso-8859-8").encode("utf-8"))
+    def test_foster_parenting(self):
+        markup = b"""<table><td></tbody>A"""
+        soup = self.soup(markup)
+        self.assertEqual("<body>A<table><tbody><tr><td></td></tr></tbody></table></body>", soup.body.decode())
