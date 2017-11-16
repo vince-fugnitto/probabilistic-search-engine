@@ -38,9 +38,9 @@ def create_inverted_index():
 
     for term in sorted_terms:
         sentiment = afinn.score(term)
-        f.write("%s %s " % (term, sentiment))
+        f.write("%s %s" % (term, sentiment))
         for posting, frequency in inverted_index[term].items():
-            f.write("%s %s" % (posting, frequency))
+            f.write(" %s %s" % (posting, frequency))
         f.write("\n")
 
     f.close()   # Closes file
@@ -50,17 +50,23 @@ def create_inverted_index():
 def load_inverted_index():
     f = open("inverted_index.txt", "r")
     f.readline()  # Discards empty line
-    index = dict()
+    index = {}
 
     # Adds each line from file to dictionary
     for line in f.readlines():
         elements = line.split()
-        index[elements[0]] = dict()
+        index[elements[0]] = TermDict()
 
-        for i in range(1, len(elements), 2):
+        for i in range(2, len(elements), 2):
+            index[elements[0]].sentiment = elements[1]
             index[elements[0]][elements[i]] = elements[i + 1]
 
-    return inverted_index
+    return index
 
 
-create_inverted_index()
+class TermDict(dict):
+    sentiment = 0
+
+
+#create_inverted_index()
+print(load_inverted_index()["dog"].sentiment)
