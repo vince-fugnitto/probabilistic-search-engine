@@ -1,6 +1,8 @@
 ''' Web Crawler Python Module '''
 from bs4 import BeautifulSoup as bs
 import json
+import nltk
+import os
 import re
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -40,6 +42,9 @@ def extract_content():
                 urls.append(value.rstrip('/'))
     print('finished extracting list of urls.')
     print('started extracting content of children urls...')
+    # create content directory if not exists
+    if not os.path.exists('content'):
+        os.makedirs('content')
     # iterate over urls and extract content
     with open('content/corpus.txt', 'w') as file:
         for url in urls[0:bound]:
