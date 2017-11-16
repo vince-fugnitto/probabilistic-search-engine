@@ -64,9 +64,35 @@ def load_inverted_index():
     return index
 
 
+# Returns a list of matching document NEWIDs that contain the keyword(s) in the search string.
+# It is assumed that the keywords have an implicit AND between them.
+def search(search_string, inverted_index):
+    search_terms = search_string.split()
+
+    postings_list = list()
+
+    # Creates a list of terms from the search string
+    for term in search_terms:
+        modified_term = term.lower()
+        if modified_term in inverted_index:
+            postings_list.append(set(inverted_index[modified_term].keys()))
+
+    if len(postings_list) == 0:
+        return list()
+
+    doc_ids = postings_list[0]  # Contains all NEWIDs
+
+    # Intersects the sets of each term
+    for postings in postings_list:
+        doc_ids = doc_ids.intersection(postings)
+
+    return list(doc_ids)
+
+
 class TermDict(dict):
     sentiment = 0
 
 
 #create_inverted_index()
-print(load_inverted_index()["dog"].sentiment)
+index = load_inverted_index()
+print(search("dog", index))
