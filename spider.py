@@ -1,3 +1,4 @@
+import argparse
 from scrapy.crawler import CrawlerProcess
 from scrapy.linkextractors import LinkExtractor
 from scrapy.spiders import CrawlSpider, Rule
@@ -65,19 +66,27 @@ class InfoSpider(CrawlSpider):
         yield data
 
 
-'''
-Define a CrawlerProcess to be able to run Scrapy spider through a python script
-CLOSESPIDER_ITEMCOUNT = # of urls items to be parsed (bound)
-FEED_FORMAT = specify the file type
-FEED_URI = specify the file name to write data to at yield keyword
-'''
-process = CrawlerProcess({
-    'USER_AGENT': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)',
-    'CLOSESPIDER_ITEMCOUNT': 3,
-    'FEED_FORMAT': 'json',
-    'FEED_URI': 'result.json'
-})
+def execute_spider():
+    parser = argparse.ArgumentParser(description='define spider params')
+    parser.add_argument('-max', type=int, help='spider url max bound', default=10)
+    args = parser.parse_args()
+    bound = args.max
+    '''
+    Define a CrawlerProcess to be able to run Scrapy spider through a python script
+    CLOSESPIDER_ITEMCOUNT = # of urls items to be parsed (bound)
+    FEED_FORMAT = specify the file type
+    FEED_URI = specify the file name to write data to at yield keyword
+    '''
+    process = CrawlerProcess({
+        'USER_AGENT': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)',
+        'CLOSESPIDER_ITEMCOUNT': bound,
+        'FEED_FORMAT': 'json',
+        'FEED_URI': 'result.json'
+    })
+    # init crawler and start
+    process.crawl(InfoSpider)
+    process.start()
 
-# init crawler and start
-process.crawl(InfoSpider)
-process.start()
+
+if __name__ == '__main__':
+    execute_spider()
