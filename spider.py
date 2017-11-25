@@ -1,65 +1,76 @@
-import re
-import string
-
-import scrapy
-from scrapy.spiders import CrawlSpider, Rule
-from scrapy.linkextractors import LinkExtractor
 from scrapy.crawler import CrawlerProcess
+from scrapy.linkextractors import LinkExtractor
+from scrapy.spiders import CrawlSpider, Rule
 
-import nltk
 from nltk.corpus import stopwords
-
 
 # define stopwords used for normalization
 stops = set(stopwords.words("english"))
 
 
 class InfoSpider(CrawlSpider):
-        """ Information Retrieval Spider """
-        name = "InfoSpider"
-        start_urls = [
-            "https://csu.qc.ca/content/student-groups-associations",
-            "https://www.concordia.ca/artsci/students/associations.html",
-            "http://www.cupfa.org",
-            "http://cufa.net",
-        ]
+    """
+    Information Retrieval Spider
+    - spider starts by using start_urls and iteratively scanning web-pages for content and url links
+    - content is scrapped using the parse_item class method which retrieves textual content from each web-page
+    - content is written to a single json file (dict of url, and text)
+    """
+    name = "InfoSpider"
 
-        rules = (
-            Rule(LinkExtractor(), callback='parse_item', follow=True),
-        )
+    # spider start-urls (initial urls which are used once the spider is initiated)
+    start_urls = [
+        "https://csu.qc.ca/content/student-groups-associations",
+        "https://www.concordia.ca/artsci/students/associations.html",
+        "http://www.cupfa.org",
+        "http://cufa.net",
+    ]
 
-        # define stopwords used for normalization
-        stops = set(stopwords.words('english'))
+    # specify spider rules to follow urls found on the web-page and call parse_item
+    rules = (
+        Rule(LinkExtractor(), callback='parse_item', follow=True),
+    )
 
-        def parse_item(self, response):
-            """ parse response (web page) """
-            # create a dict object to hold data
-            data = dict()
-            # store response url
-            data['url'] = response.url
-            # store response title
-            data['title'] = response.meta['link_text']
-            # obtain textual tags within divs
-            divs = response.xpath('//div')
-            # store p tags
-            paragraphs = list()
-            for p in divs.xpath('.//p/text()').re('\w+'):
-                paragraphs.append(p)
-            # store header tags
-            headers = list()
-            for h in divs.xpath('.//h1/text()').re('\w+'):
-                headers.append(h)
-            for h in divs.xpath('.//h2/text()').re('\w+'):
-                headers.append(h)
-            for h in divs.xpath('.//h3/text()').re('\w+'):
-                headers.append(h)
-            # store text into a single list without stopwords
-            text = [w.lower() for w in (paragraphs + headers) if w not in self.stops]
-            data['text'] = text
-            # return and write json
-            yield data
+    # define stopwords used for normalization
+    stops = set(stopwords.words('english'))
+
+    def parse_item(self, response):
+        """
+        parse individual web-pages for textual content
+        :param response: web-page in context
+        """
+        # create a dict object to hold data
+        data = dict()
+        # store response url
+        data['url'] = response.url
+        # store response title
+        data['title'] = response.meta['link_text']
+        # obtain textual tags within divs, use regex '\w+' to only obtain word occurences within tags
+        divs = response.xpath('//div')
+        # store p tags (paragraphs)
+        paragraphs = list()
+        for p in divs.xpath('.//p/text()').re('\w+'):
+            paragraphs.append(p)
+        # store header tags (h1 to h3)
+        headers = list()
+        for h in divs.xpath('.//h1/text()').re('\w+'):
+            headers.append(h)
+        for h in divs.xpath('.//h2/text()').re('\w+'):
+            headers.append(h)
+        for h in divs.xpath('.//h3/text()').re('\w+'):
+            headers.append(h)
+        # store text into a single list excluding any stopwords
+        text = [w.lower() for w in (paragraphs + headers) if w not in self.stops]
+        data['text'] = text
+        # return and write dictionary to json result file
+        yield data
 
 
+'''
+Define a CrawlerProcess to be able to run Scrapy spider through a python script
+CLOSESPIDER_ITEMCOUNT = # of urls items to be parsed (bound)
+FEED_FORMAT = specify the file type
+FEED_URI = specify the file name to write data to at yield keyword
+'''
 process = CrawlerProcess({
     'USER_AGENT': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)',
     'CLOSESPIDER_ITEMCOUNT': 3,

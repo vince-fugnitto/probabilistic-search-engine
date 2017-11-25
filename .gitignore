@@ -61,3 +61,5 @@ target/
 content/
 
 reuters21578/
+
+.idea/
