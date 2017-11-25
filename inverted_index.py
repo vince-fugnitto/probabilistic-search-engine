@@ -2,27 +2,19 @@ import nltk
 from bs4 import BeautifulSoup
 import os
 from afinn import Afinn
+import json
 
 
-# Writes a frequency inverted index to a text file using the spimi algorithm
 def create_inverted_index():
-    inverted_index = dict()
-    afinn = Afinn()
+    with open('result.json') as json_data:
+        inverted_index = dict()
+        afinn = Afinn()
+        data = json.load(json_data)
 
-    # Goes through each of the documents
-    for i in range(22):
-        file_name = "reuters21578/reut2-{:03d}.sgm".format(i)
-        soup = BeautifulSoup(open(file_name, encoding="latin-1"), "html.parser")
+        for entry in data:
+            newid = entry["url"]  # Gets NEWID value from article
+            tokens = entry["text"]  # Forms a list of tokens from text
 
-        articles = soup.find_all("reuters")  # Retrieves a list of articles within a file
-
-        # Iterates through each article to get tokens
-        for article in articles:
-            newid = article.attrs["newid"]  # Gets NEWID value from article
-            text = article.find('text').get_text()  # Retrieves text from article
-            tokens = nltk.word_tokenize(text)  # Forms a list of tokens from text
-
-            # Adds tokens and their belonging document IDs to inverted index
             for token in tokens:
                 modified_token = token.lower()
                 if modified_token not in inverted_index:
@@ -32,18 +24,18 @@ def create_inverted_index():
                 else:
                     inverted_index[modified_token][newid] += 1
 
-    # Write to text file
-    f = open("inverted_index.txt", "w")
-    sorted_terms = sorted(inverted_index)
+                    # Write to text file
+        f = open("inverted_index.txt", "w")
+        sorted_terms = sorted(inverted_index)
 
-    for term in sorted_terms:
-        sentiment = afinn.score(term)
-        f.write("%s %s" % (term, sentiment))
-        for posting, frequency in inverted_index[term].items():
-            f.write(" %s %s" % (posting, frequency))
-        f.write("\n")
+        for term in sorted_terms:
+            sentiment = afinn.score(term)
+            f.write("%s %s" % (term.encode("utf-8"), sentiment))
+            for posting, frequency in inverted_index[term].items():
+                f.write(" %s %s" % (posting, frequency))
+            f.write("\n")
 
-    f.close()   # Closes file
+        f.close()  # Closes file
 
 
 # Retrieves SPIMI inverted index
@@ -90,9 +82,12 @@ def search(search_string, inverted_index):
 
 
 class TermDict(dict):
-    sentiment = 0
+    def __init__(self):
+        self.sentiment = 0
 
 
-#create_inverted_index()
+create_inverted_index()
 index = load_inverted_index()
-print(search("dog", index))
+
+for term in index:
+    print(term.sentiment)
