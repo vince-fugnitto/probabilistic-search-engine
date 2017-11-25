@@ -70,7 +70,6 @@ def execute_spider():
     parser = argparse.ArgumentParser(description='define spider params')
     parser.add_argument('-max', type=int, help='spider url max bound', default=10)
     args = parser.parse_args()
-    bound = args.max
     '''
     Define a CrawlerProcess to be able to run Scrapy spider through a python script
     CLOSESPIDER_ITEMCOUNT = # of urls items to be parsed (bound)
@@ -79,7 +78,7 @@ def execute_spider():
     '''
     process = CrawlerProcess({
         'USER_AGENT': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)',
-        'CLOSESPIDER_ITEMCOUNT': bound,
+        'CLOSESPIDER_ITEMCOUNT': args.max,
         'FEED_FORMAT': 'json',
         'FEED_URI': 'result.json'
     })
