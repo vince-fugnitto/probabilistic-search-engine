@@ -133,8 +133,10 @@ class TermDict(dict):
 #create_inverted_index()
 index = load_inverted_index()
 #create_doc_stats()
-#load_doc_stats()
+doc_stats = load_doc_stats()
 #print(index)
 
-results = search("school", index)
-print(results)
+results = search("a", index)
+
+for result in results:
+    print(result, doc_stats[result][1])
