@@ -33,7 +33,7 @@ def create_inverted_index():
             sorted_terms = sorted(inverted_index)
             for term in sorted_terms:
                 sentiment = sentiment_score(term, 's')
-                f.write("%s %s" % (term, sentiment))
+                f.write("%s %s" % (term.encode('utf-8'), sentiment))
                 for posting, frequency in inverted_index[term].items():
                     f.write(" %s %s" % (posting, frequency))
                 f.write("\n")
@@ -167,11 +167,14 @@ def run():
     index = load_inverted_index()
     doc_stats = load_doc_stats()
     while True:
-        query = input("\nplease provide a query:\n")
+        query = raw_input("=== please provide a query: ===\n")
         if query is not None:
             results = search(str(query), index)
-            for result in results:
-                print(result, doc_stats[result][1])
+            if results:
+                for result in results:
+                    print("{}\t{}".format(doc_stats[result][1], result))
+            else:
+                print("No results found!")
         else:
             continue
 
