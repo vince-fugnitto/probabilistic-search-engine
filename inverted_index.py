@@ -12,7 +12,7 @@ def create_inverted_index():
         data = json.load(json_data)  # Data retrieved from json file created by crawler
 
         for entry in data:
-            id = entry["url"]  # Gets URL value from article
+            url = entry["url"]  # Gets URL value from article
             tokens = entry["text"]  # Gets a list of tokens from text
 
             # Adds tokens to dictionary while keeping track of frequency
@@ -20,10 +20,10 @@ def create_inverted_index():
                 modified_token = token.lower()
                 if modified_token not in inverted_index:
                     inverted_index[modified_token] = dict()
-                if id not in inverted_index[modified_token]:
-                    inverted_index[modified_token][id] = 1
+                if url not in inverted_index[modified_token]:
+                    inverted_index[modified_token][url] = 1
                 else:
-                    inverted_index[modified_token][id] += 1
+                    inverted_index[modified_token][url] += 1
 
         # Write to text file
         with open("inverted_index.txt", "w") as f:
@@ -56,12 +56,12 @@ def load_inverted_index():
 
 # Scores content based on the afinn dictionary
 # Set type to s for strings, l for lists
-def sentiment_score(content, type='s'):
+def sentiment_score(content, s_type='s'):
     afinn = Afinn()  # Afinn dictionary library object
     score = 0.0  # Sentiment score value
-    if type == 's':
+    if s_type == 's':
         score = afinn.score(content)
-    elif type == 'l':
+    elif s_type == 'l':
         score = afinn.score(' '.join(content))
     return score
 
@@ -74,11 +74,11 @@ def create_doc_stats():
             doc_stats = collections.OrderedDict()  # Dictionary holding length and sentiment values for all URLs
 
             for entry in data:
-                id = entry["url"]  # Gets URL
+                url = entry["url"]  # Gets URL
                 tokens = entry["text"]  # Gets a list of tokens from text
                 score = sentiment_score(tokens, 'l')  # Scores all tokens
-                doc_stats[id] = (len(tokens), score)  # Sets length and sentiment as stats
-                f.write("%s %s %s\n" % (id, len(tokens), score))  # Write URL, length and sentiment values
+                doc_stats[url] = (len(tokens), score)  # Sets length and sentiment as stats
+                f.write("%s %s %s\n" % (url, len(tokens), score))  # Write URL, length and sentiment values
 
 
 # Returns a dictionary containing all crawled URL with their length and sentiment value
