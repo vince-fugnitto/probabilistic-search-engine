@@ -5,8 +5,11 @@ import json
 from afinn import Afinn
 
 
-# Creates a "inverted_index.txt" file containing the inverted index
 def create_inverted_index():
+    """
+    Creates an inverted_index.txt file containing the inverted index
+    :return: inverted_index.txt
+    """
     with open('result.json') as json_data:
         inverted_index = dict()  # Dictionary representing inverted index
         data = json.load(json_data)  # Data retrieved from json file created by crawler
@@ -36,8 +39,11 @@ def create_inverted_index():
                 f.write("\n")
 
 
-# Retrieves inverted index as a dictionary
 def load_inverted_index():
+    """
+    retrieves inverted index as a dictionary
+    :return: index
+    """
     with open("inverted_index.txt", "r") as f:
         f.readline()  # Discards empty line
         index = {}  # Dictionary representing inverted index
@@ -54,9 +60,13 @@ def load_inverted_index():
     return index
 
 
-# Scores content based on the afinn dictionary
-# Set type to s for strings, l for lists
 def sentiment_score(content, s_type='s'):
+    """
+    Scores content based on the afinn dictionary
+    :param content:
+    :param s_type: s for strings, l for lists
+    :return: sentiment score
+    """
     afinn = Afinn()  # Afinn dictionary library object
     score = 0.0  # Sentiment score value
     if s_type == 's':
@@ -66,8 +76,11 @@ def sentiment_score(content, s_type='s'):
     return score
 
 
-# Creates a "doc_stats.txt" file containing all crawled URL with their length and sentiment value
 def create_doc_stats():
+    """
+    Creates a "doc_stats.txt" file containing all crawled URL with their length and sentiment value
+    :return: doc_stats.txt
+    """
     with open("doc_stats.txt", "w") as f:
         with open("result.json", "r") as json_data:
             data = json.load(json_data)  # Retrieves data from json file created by crawler
@@ -81,8 +94,11 @@ def create_doc_stats():
                 f.write("%s %s %s\n" % (url, len(tokens), score))  # Write URL, length and sentiment values
 
 
-# Returns a dictionary containing all crawled URL with their length and sentiment value
 def load_doc_stats():
+    """
+    Returns a dictionary containing all crawled URL with their length and sentiment value
+    :return: doc_stats
+    """
     doc_stats = {}
 
     with open("doc_stats.txt", "r") as f:
@@ -93,9 +109,14 @@ def load_doc_stats():
     return doc_stats
 
 
-# Returns a list of matching URLs that contain the keyword(s) in the search string.
-# It is assumed that the keywords have an implicit AND between them.
 def search(search_string, inverted_index):
+    """
+    Returns a list of matching URLs that contain the keyword(s) in the search string.
+    It is assumed that the keywords have an implicit AND between them.
+    :param search_string:
+    :param inverted_index:
+    :return: sorted_results
+    """
     search_terms = search_string.split()  # Gets list of query terms
     search_score = sentiment_score(search_string, 's')  # Gets sentiment score for all query terms
     is_positive = search_score >= 0  # Gets whether query is positive or negative
@@ -124,8 +145,11 @@ def search(search_string, inverted_index):
     return sorted_results
 
 
-# Dictionary class made to hold sentiment values
 class TermDict(dict):
+    """
+    Dictionary class made to hold sentiment values
+    """
+
     def __init__(self):
         self.sentiment = 0
 
