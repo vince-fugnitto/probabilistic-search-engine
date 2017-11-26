@@ -1,12 +1,9 @@
 import argparse
+import os
+
 from scrapy.crawler import CrawlerProcess
 from scrapy.linkextractors import LinkExtractor
 from scrapy.spiders import CrawlSpider, Rule
-
-from nltk.corpus import stopwords
-
-# define stopwords used for normalization
-stops = set(stopwords.words("english"))
 
 
 class InfoSpider(CrawlSpider):
@@ -30,9 +27,6 @@ class InfoSpider(CrawlSpider):
     rules = (
         Rule(LinkExtractor(), callback='parse_item', follow=True),
     )
-
-    # define stopwords used for normalization
-    stops = set(stopwords.words('english'))
 
     def parse_item(self, response):
         """
@@ -74,10 +68,19 @@ class InfoSpider(CrawlSpider):
         for f in response.xpath('.//footer/text()').re('\w+'):
             footers.append(f)
         # store text into a single list excluding any stopwords
-        text = [w.lower() for w in (title + paragraphs + headers + spans + footers) if w not in self.stops]
+        text = [w.lower() for w in (title + paragraphs + headers + spans + footers)]
         data['text'] = text
         # return and write dictionary to json result file
         yield data
+
+
+def clear_results():
+    """ delete existing result.json file if it exists """
+    try:
+        os.remove('result.json')
+        print('result.json file was successfully deleted')
+    except OSError as e:
+        print('error occured: {}'.format(str(e)))
 
 
 def execute_spider():
@@ -102,4 +105,5 @@ def execute_spider():
 
 
 if __name__ == '__main__':
+    clear_results()
     execute_spider()
