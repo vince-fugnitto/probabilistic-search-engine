@@ -130,13 +130,18 @@ class TermDict(dict):
         self.sentiment = 0
 
 
-#create_inverted_index()
+# create_inverted_index()
 index = load_inverted_index()
-#create_doc_stats()
+# create_doc_stats()
 doc_stats = load_doc_stats()
 #print(index)
 
-results = search("a", index)
 
-for result in results:
-    print(result, doc_stats[result][1])
+while True:
+    query = input("\nplease provide a query:\n")
+    if query is not None:
+        results = search(str(query), index)
+        for result in results:
+            print(result, doc_stats[result][1])
+    else:
+        continue
