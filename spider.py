@@ -44,7 +44,7 @@ class InfoSpider(CrawlSpider):
         # store response url
         data['url'] = response.url
         # store response title
-        data['title'] = response.meta['link_text']
+        title = response.meta['link_text'].split()
         # obtain textual tags within divs, use regex '\w+' to only obtain word occurences within tags
         divs = response.xpath('//div')
         # store p tags (paragraphs)
@@ -59,8 +59,22 @@ class InfoSpider(CrawlSpider):
             headers.append(h)
         for h in divs.xpath('.//h3/text()').re('\w+'):
             headers.append(h)
+        for h in divs.xpath('.//h4/text()').re('\w+'):
+            headers.append(h)
+        for h in divs.xpath('.//h5/text()').re('\w+'):
+            headers.append(h)
+        for h in divs.xpath('.//h6/text()').re('\w+'):
+            headers.append(h)
+        # store span tags textual content
+        spans = list()
+        for s in response.xpath('.//span/text()').re('\w+'):
+            spans.append(s)
+        # store footer textual content
+        footers = list()
+        for f in response.xpath('.//footer/text()').re('\w+'):
+            footers.append(f)
         # store text into a single list excluding any stopwords
-        text = [w.lower() for w in (paragraphs + headers) if w not in self.stops]
+        text = [w.lower() for w in (title + paragraphs + headers + spans + footers) if w not in self.stops]
         data['text'] = text
         # return and write dictionary to json result file
         yield data
