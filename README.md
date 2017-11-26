@@ -11,9 +11,8 @@ pip install scrapy --user
 
 ### Usage
 
-A step by step series of examples that tell you have to get a development env running
-
 Spider
+ * -max {value}: specifies max bound for url crawling
 
 ```
 python spider.py
@@ -21,6 +20,7 @@ python spider.py -max {value}
 ```
 
 Inverted Index
+* -build: optional: if specified, inverted index is built
 
 ```
 python inverted_index.py
